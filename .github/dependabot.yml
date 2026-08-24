@@ -1,0 +1,65 @@
+version: 2
+updates:
+  # One entry per docker-compose.yml (+ apps/caddy's Dockerfile) — Dependabot
+  # needs a directory per Docker context, it doesn't glob across apps/*/.
+  - package-ecosystem: "docker"
+    directory: "/apps/caddy"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "docker"]
+
+  - package-ecosystem: "docker"
+    directory: "/apps/grafana"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "docker"]
+
+  - package-ecosystem: "docker"
+    directory: "/apps/prometheus"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "docker"]
+
+  - package-ecosystem: "docker"
+    directory: "/apps/uptime-kuma"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "docker"]
+
+  - package-ecosystem: "docker"
+    directory: "/apps/ddns-updater"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "docker"]
+
+  - package-ecosystem: "docker"
+    directory: "/apps/gitlab-runner"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "docker"]
+
+  # Provider version constraints in required_providers blocks.
+  - package-ecosystem: "terraform"
+    directory: "/terraform/dns"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "terraform"]
+
+  - package-ecosystem: "terraform"
+    directory: "/terraform/truenas"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "terraform"]
+
+  - package-ecosystem: "terraform"
+    directory: "/incus/modules/incus_host"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "terraform"]
+
+  # Keeps actions/* versions in .github/workflows/ current.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "ci"]
