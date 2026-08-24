@@ -139,4 +139,4 @@ From here, committing changes to `komodo.toml` is enough to manage your stacks a
 
 ## License
 
-Apache License 2.0 — see [`LICENSE`](LICENSE).
+MIT — see [`LICENSE`](LICENSE).
