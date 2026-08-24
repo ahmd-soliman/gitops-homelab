@@ -1,0 +1,87 @@
+name: validate
+
+# Pre-deploy sanity checks — mirrors the validate stage of the real repo's
+# CI (GitLab, in the private setup). These don't deploy anything; they just
+# catch a broken compose file / Caddyfile / Terraform config before it ships,
+# same spirit as apps/ being Komodo-deployed and incus/gitops/ being
+# ArgoCD-reconciled rather than pushed by this workflow.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  compose-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate every docker-compose.yml
+        run: |
+          set -e
+          for f in $(find apps -name 'docker-compose.yml' | sort); do
+            echo "validating $f"
+            docker compose -f "$f" config -q
+          done
+
+  caddy-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the caddy image
+        # Proves it still compiles with the cloudflare DNS module baked in
+        # (apps/caddy/Dockerfile), independent of the Caddyfile check below.
+        run: docker build -t caddy-cf:ci apps/caddy
+
+      - name: Adapt the Caddyfile
+        # `caddy adapt` catches every structural / unknown-directive error
+        # without needing CF_TOKEN — unlike `caddy validate`, which would
+        # try to provision the cloudflare module against a real token this
+        # workflow doesn't have.
+        run: |
+          printf '# syntax=docker/dockerfile:1\nFROM caddy-cf:ci\nRUN --mount=type=bind,source=Caddyfile,target=/etc/caddy/Caddyfile caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile > /dev/null\n' \
+            | DOCKER_BUILDKIT=1 docker build -q -f - apps/caddy
+          echo "OK — Caddyfile adapts cleanly"
+
+      - name: Enforce caddyfile-rev matches the Caddyfile hash
+        # The Caddyfile is baked into the image (not bind-mounted), so a
+        # Caddyfile-only edit doesn't change docker-compose.yml — and
+        # Komodo's DeployStackIfChanged diffs the compose file, so it
+        # wouldn't redeploy on that edit alone. See apps/caddy/README.md.
+        run: |
+          want=$(sha256sum apps/caddy/Caddyfile | cut -c1-12)
+          have=$(sed -n 's/^# caddyfile-rev: \([0-9a-f]\{12\}\).*/\1/p' apps/caddy/docker-compose.yml | head -1)
+          if [ "$want" != "$have" ]; then
+            echo "::error::caddyfile-rev is stale (found '${have:-none}', expected '$want')"
+            echo "The Caddyfile changed but docker-compose.yml's '# caddyfile-rev:' comment wasn't bumped."
+            echo "Fix: set the first line of apps/caddy/docker-compose.yml to:  # caddyfile-rev: $want"
+            exit 1
+          fi
+          echo "OK — caddyfile-rev ($want) matches the Caddyfile"
+
+  terraform-validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir:
+          - terraform/dns
+          - terraform/truenas
+          - incus/modules/incus_host
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: terraform fmt -check
+        run: terraform -chdir=${{ matrix.dir }} fmt -check -recursive
+
+      - name: terraform init
+        # -backend=false: no real backend/credentials in CI, this only
+        # needs to resolve providers to validate configuration + types.
+        run: terraform -chdir=${{ matrix.dir }} init -backend=false -input=false
+
+      - name: terraform validate
+        run: terraform -chdir=${{ matrix.dir }} validate
