@@ -16,7 +16,7 @@ jobs:
   compose-validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Validate every docker-compose.yml
         run: |
@@ -29,7 +29,7 @@ jobs:
   caddy-validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build the caddy image
         # Proves it still compiles with the cloudflare DNS module baked in
@@ -71,7 +71,7 @@ jobs:
           - terraform/truenas
           - incus/modules/incus_host
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: hashicorp/setup-terraform@v4
 
