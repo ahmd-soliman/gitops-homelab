@@ -1,0 +1,44 @@
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:2.5.3
+    container_name: uptime-kuma
+    restart: unless-stopped
+
+    ports:
+      - "30120:3001"
+
+    user: "568:568"
+    privileged: false
+    security_opt:
+      - no-new-privileges=true
+    cap_drop:
+      - ALL
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+
+    environment:
+      - TZ=${TZ:-UTC}
+
+    volumes:
+      - /mnt/data/app-config/uptime-kuma/data:/app/data
+
+    healthcheck:
+      test: ["CMD", "node", "extra/healthcheck.js"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+# Some Docker daemons default new networks to IPv6 and can write a malformed
+# gateway address (a CIDR suffix still attached, e.g. "fdd0::1/64" instead of
+# a bare address) that some GitOps agents' bundled compose CLI fails to parse
+# strictly, crashing every deploy of this stack with a cryptic ParseAddr
+# error. Disabling IPv6 on the stack's own network sidesteps it if you hit
+# the same thing.
+networks:
+  default:
+    enable_ipv6: false

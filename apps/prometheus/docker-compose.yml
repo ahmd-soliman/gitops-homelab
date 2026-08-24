@@ -1,0 +1,31 @@
+services:
+  prometheus:
+    image: prom/prometheus:v3.14.0
+    container_name: prometheus
+    restart: unless-stopped
+    user: "568:568"
+
+    ports:
+      - "30104:30104"
+
+    command:
+      - '--web.listen-address=0.0.0.0:30104'
+      - '--config.file=/config/prometheus.yml'
+      - '--storage.tsdb.path=/data'
+      - '--storage.tsdb.retention.time=365d'
+      - '--storage.tsdb.wal-compression'
+
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges=true
+
+    volumes:
+      - /mnt/data/app-config/prometheus/config:/config
+      - /mnt/data/app-config/prometheus/data:/data
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:30104/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 5

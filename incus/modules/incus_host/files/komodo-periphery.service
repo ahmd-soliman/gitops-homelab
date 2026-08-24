@@ -1,0 +1,18 @@
+[Unit]
+Description=Reconcile Komodo Periphery container
+Wants=docker.service network-online.target
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/etc/komodo-periphery.env
+ExecStart=/usr/local/sbin/install-periphery.sh
+# In-script pull retries cover a brief flake; this covers a longer outage by
+# re-running install-periphery.sh every minute until it succeeds. Spacing is
+# well beyond StartLimit's 5-in-10s default, so the burst limit never trips.
+Restart=on-failure
+RestartSec=60s
+
+[Install]
+WantedBy=multi-user.target

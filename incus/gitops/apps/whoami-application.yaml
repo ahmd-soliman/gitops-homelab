@@ -1,0 +1,33 @@
+# whoami -- Traefik-team-maintained test/diagnostic app (returns hostname,
+# request headers, source IP as plaintext). Not a real workload; deployed to
+# smoke-test routing (Traefik -> Caddy -> DNS) and load-balancing across
+# replicas end to end. No DB, no persistent state.
+#
+# Chart is cowboysysop/whoami (community-maintained), NOT an official
+# Traefik chart -- Traefik doesn't publish one. It wraps the real upstream
+# image (github.com/traefik/whoami), not a reimplementation.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: whoami
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://cowboysysop.github.io/charts/
+    chart: whoami
+    targetRevision: 6.0.0
+    helm:
+      values: |
+        replicaCount: 2
+        # Default ClusterIP + port 80 -- fine as-is: Traefik reaches it
+        # in-cluster, no NodePort needed.
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: whoami
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

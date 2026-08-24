@@ -1,0 +1,19 @@
+services:
+  gitlab-runner:
+    image: gitlab/gitlab-runner:v18.11.4
+    container_name: gitlab-runner
+    restart: unless-stopped
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4096M
+
+    volumes:
+      # Persistent configuration storage
+      - /mnt/data/app-config/gitlab-runner/config:/etc/gitlab-runner
+      # Mount the host Docker daemon socket. This allows the runner to use the
+      # "docker" executor to spawn clean container environments for each CI/CD job.
+      - /var/run/docker.sock:/var/run/docker.sock
+

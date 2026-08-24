@@ -1,0 +1,13 @@
+[Unit]
+Description=Ensure required docker networks exist
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/etc/docker-networks.env
+ExecStart=/usr/local/sbin/ensure-docker-networks.sh
+
+[Install]
+WantedBy=multi-user.target

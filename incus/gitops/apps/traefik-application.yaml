@@ -1,0 +1,46 @@
+# Traefik -- the cluster's ingress controller, deployed as an ArgoCD
+# Application (not Terraform -- see README.md for why Traefik doesn't need
+# the same bootstrap treatment ArgoCD itself did).
+#
+# Chart is pulled directly from Traefik's own public Helm repo -- ArgoCD
+# needs no git credentials for this beyond what the root app already has.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: traefik
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://traefik.github.io/charts
+    chart: traefik
+    targetRevision: 41.3.0
+    helm:
+      values: |
+        # Bare-metal cluster, no MetalLB -- LoadBalancer would just hang
+        # Pending forever. NodePort instead.
+        service:
+          spec:
+            type: NodePort
+
+        ports:
+          web:
+            # Pinned (not left to a random assignment) so Caddy
+            # (../../apps/caddy/Caddyfile) has a stable target.
+            nodePort: 30880
+          websecure:
+            # Caddy is the only TLS-terminating component in this homelab --
+            # Traefik never needs its own HTTPS entrypoint. Not exposed at
+            # all rather than just unused, to keep the Service's port list
+            # matching what's actually in use.
+            expose:
+              default: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: traefik
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

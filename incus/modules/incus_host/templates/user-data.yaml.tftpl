@@ -1,0 +1,43 @@
+#cloud-config
+# Rendered by terraform — modules/incus_host. write_files and runcmd are the
+# extension points; everything else is fixed for all hosts in this repo.
+hostname: ${hostname}
+fqdn: ${hostname}.local
+manage_etc_hosts: true
+
+timezone: ${timezone}
+
+ssh_authorized_keys:
+  - ${ssh_public_key}
+
+package_update: true
+package_upgrade: false
+
+packages:
+%{ for pkg in base_packages ~}
+  - ${pkg}
+%{ endfor ~}
+
+%{ if length(write_files) > 0 ~}
+write_files:
+%{ for f in write_files ~}
+  - path: ${f.path}
+    permissions: "${f.permissions}"
+    owner: root:root
+%{ if f.encoding == "b64" ~}
+    encoding: b64
+    content: "${f.content}"
+%{ else ~}
+    content: |
+      ${indent(6, f.content)}
+%{ endif ~}
+%{ endfor ~}
+%{ endif ~}
+
+runcmd:
+  - [ systemctl, daemon-reload ]
+%{ for cmd in runcmd ~}
+  - ${jsonencode(["bash", "-c", cmd])}
+%{ endfor ~}
+
+final_message: "${final_message}"

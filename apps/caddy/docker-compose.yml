@@ -1,0 +1,55 @@
+# caddyfile-rev: 009c80dc6748
+# ^ first 12 hex of `shasum -a 256 apps/caddy/Caddyfile`. The Caddyfile is baked
+# into the image (Dockerfile COPY), so a Caddyfile-only edit doesn't change this
+# compose — and Komodo's DeployStackIfChanged diffs the compose, so the caddy
+# stack would NOT redeploy on a Caddyfile-only edit. Bumping this line to the
+# new hash makes the compose differ, so Komodo's pull-deploy procedure rebuilds
+# (run_build=true) and the new Caddyfile goes live automatically. A CI job can
+# enforce this equals the Caddyfile hash (see the repo README) so a forgotten
+# bump fails CI instead of silently not deploying. Regenerate with:
+#   shasum -a 256 apps/caddy/Caddyfile | cut -c1-12
+services:
+  caddy:
+    build: .
+    image: caddy-cloudflare:local
+    # Built locally (xcaddy + cloudflare DNS module) — it's not in any registry.
+    # pull_policy: build makes `docker compose up` BUILD it instead of trying to
+    # pull (Komodo runs `up` without --build, which otherwise fails on pull).
+    pull_policy: build
+    container_name: caddy
+    restart: unless-stopped
+    # NET_BIND_SERVICE lets the non-root caddy process bind 80/443.
+    cap_add:
+      - NET_BIND_SERVICE
+    ports:
+      - "${CADDY_HTTP_PORT:-80}:80"
+      - "${CADDY_HTTPS_PORT:-443}:443"
+      - "${CADDY_HTTPS_PORT:-443}:443/udp" # HTTP/3
+    environment:
+      - TZ=${TZ:-UTC}
+    # CF token (CF_TOKEN) loaded from apps/caddy/.env (gitignored). env_file is
+    # resolved relative to THIS compose file's dir — unlike ${...} interpolation,
+    # which reads .env from the deployer's CWD; a deploy tool that doesn't cd
+    # into apps/caddy would otherwise silently resolve CF_TOKEN blank. The
+    # Caddyfile reads {env.CF_TOKEN}.
+    env_file:
+      # required:false so `docker compose config` in CI doesn't fail on the
+      # gitignored .env (absent from the repo); on the host it's present + loaded.
+      - path: .env
+        required: false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Caddyfile is BAKED into the image (see Dockerfile) — NOT bind-mounted:
+      # a relative ./ mount can mis-resolve depending on where your deploy
+      # agent actually runs the compose file from vs. where the host daemon
+      # resolves bind sources. Only absolute host paths are used below.
+      # Cert + state persistence on durable storage. Reused across redeploys
+      # so Caddy doesn't re-issue certs every time.
+      - /mnt/data/app-config/caddy/data:/data
+      - /mnt/data/app-config/caddy/config:/config
+    healthcheck:
+      test: ["CMD", "caddy", "version"]
+      interval: 30s
+      timeout: 5s
+      retries: 5

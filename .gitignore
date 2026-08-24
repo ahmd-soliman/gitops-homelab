@@ -1,0 +1,22 @@
+### Environment & secrets ###
+.env
+.env.local
+.env.*.local
+
+### Terraform ###
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+**/.terraform.lock.hcl
+
+### OS ###
+.DS_Store
+Thumbs.db
+
+### IDEs ###
+.idea/
+.vscode/
+

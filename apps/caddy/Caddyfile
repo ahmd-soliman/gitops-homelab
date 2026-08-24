@@ -1,0 +1,125 @@
+# Caddyfile — homelab edge proxy.
+# This file is the source of truth for routing. Edit it, commit, let Komodo
+# redeploy. See README.md for the cutover/rollback story if you're replacing
+# an existing reverse proxy with this.
+{
+	# All certs via Let's Encrypt DNS-01 over Cloudflare (no public :80/:443
+	# reachability needed — this also works for LAN-only hosts). Token via env.
+	# Pin the ACME propagation check to Cloudflare's own public resolvers, not
+	# your LAN resolver — if your router/AdGuard does a wildcard rewrite for
+	# your domain, it can hijack the authoritative-NS lookup during issuance
+	# and cause intermittent renewal failures.
+	acme_dns cloudflare {env.CF_TOKEN} {
+		resolvers 1.1.1.1 1.0.0.1
+	}
+}
+
+(hsts) {
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+}
+
+# Every single-label host below is served from ONE wildcard site, so they
+# all share a single *.homelab.example certificate (issued once via DNS-01)
+# instead of a per-host cert each. Adding a new host is a matcher + handle
+# block below — no new cert, no new DNS record, and it doesn't leak the new
+# hostname into public Certificate Transparency logs the way a per-host cert
+# would.
+#
+# *.homelab.example covers ONE label only — it does NOT cover the bare apex,
+# which is intentionally not served here, and it does NOT cover two-label
+# hosts (foo.bar.homelab.example). Keep every routed hostname single-label.
+*.homelab.example {
+	import hsts
+
+	# --- Kubernetes cluster ingress -----------------------------------------
+	# ArgoCD and whoami both live inside a small hand-rolled cluster
+	# (see ../../incus/ in this repo). Traefik is the cluster's own ingress
+	# controller and owns all Host-based routing to in-cluster Services from
+	# here on — Caddy only ever talks to Traefik's NodePort, never to a pod
+	# directly. Adding another cluster-hosted hostname later is a new
+	# @matcher here + a new Traefik IngressRoute in the cluster, no new
+	# cert/DNS/ACME ever (Caddy stays the only thing that talks to
+	# Cloudflare/Let's Encrypt).
+	#
+	# Two upstreams for round-robin across both cluster nodes.
+	#
+	# health_headers sets Host on the ACTIVE health check probe specifically.
+	# Without it, Caddy's health check defaults to the upstream dial address
+	# (e.g. "192.168.1.42:30880") as Host, which Traefik's IngressRoute
+	# doesn't match (no catch-all router) — so Traefik 404s the probe, Caddy
+	# marks both upstreams unhealthy, and reverse_proxy then 503s ALL real
+	# traffic regardless of the correct Host header real requests carry.
+	@argocd host argocd.homelab.example
+	handle @argocd {
+		reverse_proxy 192.168.1.41:30880 192.168.1.42:30880 {
+			lb_policy round_robin
+			health_uri /
+			health_headers {
+				Host argocd.homelab.example
+			}
+		}
+	}
+
+	@whoami host whoami.homelab.example
+	handle @whoami {
+		reverse_proxy 192.168.1.41:30880 192.168.1.42:30880 {
+			lb_policy round_robin
+			health_uri /
+			health_headers {
+				Host whoami.homelab.example
+			}
+		}
+	}
+
+	# --- Plain container stacks (Komodo-deployed, this repo's apps/) -------
+	@grafana host grafana.homelab.example
+	handle @grafana {
+		reverse_proxy 192.168.1.10:30037
+	}
+
+	@uptime host uptime.homelab.example
+	handle @uptime {
+		reverse_proxy 192.168.1.10:30120
+	}
+
+	# --- Self-signed / internal-only upstreams ------------------------------
+	# TrueNAS's UI builds its own redirect from the Host header. Without
+	# forcing Host here, it echoes the upstream IP into the redirect, and the
+	# browser lands on the raw IP — where the *.homelab.example cert fails
+	# the name check (the cert covers the domain, not the IP).
+	@nas host nas.homelab.example
+	handle @nas {
+		reverse_proxy https://192.168.1.10:8443 {
+			header_up Host {host}
+			transport http {
+				tls_insecure_skip_verify
+			}
+		}
+	}
+
+	@portainer host portainer.homelab.example
+	handle @portainer {
+		reverse_proxy https://192.168.1.10:31015 {
+			transport http {
+				tls_insecure_skip_verify
+			}
+		}
+	}
+
+	# --- Router admin: can't be reverse-proxied ------------------------------
+	# Some router/AP admin UIs pin session cookies to their own LAN IP and
+	# can't be reverse-proxied at all. Browsers also block automatic
+	# HTTPS→HTTP redirects to private IPs — but a user-initiated click from
+	# an HTTPS page to an HTTP link IS allowed, so serve a landing page with
+	# a link instead of a 302.
+	@router host router.homelab.example
+	handle @router {
+		header Content-Type "text/html; charset=utf-8"
+		respond `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Router</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#1a1a2e}a{display:inline-block;padding:14px 28px;background:#e94560;color:#fff;text-decoration:none;border-radius:6px;font-size:1.1rem}</style></head><body><a href="http://192.168.1.1/">Open Router Admin Panel</a></body></html>` 200
+	}
+
+	# Unknown *.homelab.example host → behave like "no such site".
+	handle {
+		abort
+	}
+}

@@ -1,0 +1,34 @@
+# The app-of-apps root -- the ONE thing in this directory tree still applied
+# by hand, once. Everything else in gitops/apps/ is then reconciled
+# automatically: merge a new Application manifest there and ArgoCD creates
+# it; delete one and ArgoCD prunes it.
+#
+# Deliberately excluded from gitops/apps/ itself (not self-managing) --
+# conventional app-of-apps layout, keeps the one manually-bootstrapped
+# object clearly separate from what it manages.
+#
+# Apply once:
+#   kubectl --kubeconfig <admin.kubeconfig> apply -f gitops/root-application.yaml
+#
+# Requires a Secret in the argocd namespace with read-only git credentials
+# for this repo (SSH deploy key, can_push: false) -- see README.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:youruser/gitops-homelab.git
+    targetRevision: main
+    path: incus/gitops/apps
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

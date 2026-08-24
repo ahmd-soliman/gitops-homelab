@@ -1,0 +1,131 @@
+# Komodo resource definitions for this repo. `resource_sync` at the bottom
+# points at this exact file, so committing a change here (a new [[stack]], a
+# new [[server]]) is enough — Komodo's sync procedure creates/updates/deletes
+# resources to match on its next run. See docs/komodo-setup.md for the
+# one-time UI bootstrap this depends on.
+
+[[server]]
+name = "homelab"
+[server.config]
+# Same-host Periphery, reached over the docker network Komodo Core/Periphery
+# share — not a public address.
+address = "http://komodo-periphery:8120"
+enabled = true
+
+[[server]]
+name = "runner-host"
+[server.config]
+# A second host — e.g. a VM or Incus container running its own Periphery.
+# Add one [[server]] block per machine you deploy to.
+address = "http://192.168.1.30:8120"
+enabled = true
+
+##
+
+[[stack]]
+name = "caddy"
+[stack.config]
+server = "homelab"
+linked_repo = "gitops-homelab"
+file_paths = ["apps/caddy/docker-compose.yml"]
+# Komodo runs `docker compose build` before `up` so the custom Caddy image
+# (xcaddy + cloudflare DNS module) rebuilds on every deploy and picks up
+# Caddyfile changes baked in via the Dockerfile's COPY.
+run_build = true
+# auto_pull MUST be false: the image is built locally, not pulled from a
+# registry — `compose pull` would fail on it.
+auto_pull = false
+
+##
+
+[[stack]]
+name = "grafana"
+[stack.config]
+server = "homelab"
+linked_repo = "gitops-homelab"
+file_paths = ["apps/grafana/docker-compose.yml"]
+
+##
+
+[[stack]]
+name = "prometheus"
+[stack.config]
+server = "homelab"
+linked_repo = "gitops-homelab"
+file_paths = ["apps/prometheus/docker-compose.yml"]
+
+##
+
+[[stack]]
+name = "uptime-kuma"
+[stack.config]
+server = "homelab"
+linked_repo = "gitops-homelab"
+file_paths = ["apps/uptime-kuma/docker-compose.yml"]
+
+##
+
+[[stack]]
+name = "ddns-updater"
+[stack.config]
+server = "homelab"
+linked_repo = "gitops-homelab"
+file_paths = ["apps/ddns-updater/docker-compose.yml"]
+
+##
+
+[[stack]]
+name = "gitlab-runner"
+[stack.config]
+server = "runner-host"
+linked_repo = "gitops-homelab"
+file_paths = ["apps/gitlab-runner/docker-compose.yml"]
+
+##
+
+[[repo]]
+name = "gitops-homelab"
+[repo.config]
+server = "homelab"
+git_provider = "github.com"
+git_account = "oauth2"
+repo = "youruser/gitops-homelab"
+
+##
+
+[[procedure]]
+name = "pull-deploy"
+description = "Pulls the repo, syncs komodo.toml, deploys anything changed"
+config.schedule = "Every 10 minutes"
+
+[[procedure.config.stage]]
+name = "Pull Repo"
+enabled = true
+executions = [
+  { execution.type = "PullRepo", execution.params.repo = "gitops-homelab", enabled = true }
+]
+
+[[procedure.config.stage]]
+name = "Sync Resources"
+enabled = true
+executions = [
+  { execution.type = "RunSync", execution.params.sync = "resources", enabled = true }
+]
+
+[[procedure.config.stage]]
+name = "Deploy if changed"
+enabled = true
+executions = [
+  { execution.type = "BatchDeployStackIfChanged", execution.params.pattern = "*", enabled = true }
+]
+
+##
+
+[[resource_sync]]
+name = "resources"
+[resource_sync.config]
+linked_repo = "gitops-homelab"
+webhook_enabled = false
+resource_path = ["komodo.toml"]
+managed = true
+delete = true

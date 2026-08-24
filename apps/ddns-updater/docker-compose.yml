@@ -1,0 +1,50 @@
+services:
+  ddns:
+    image: qmcgaw/ddns-updater:v2.10.0
+    container_name: ddns-updater
+    restart: unless-stopped
+    platform: linux/amd64
+
+    ports:
+      - "30007:30007"
+
+    user: "568:568"
+    privileged: false
+    security_opt:
+      - no-new-privileges=true
+    cap_drop:
+      - ALL
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4096M
+
+    environment:
+      - TZ=${TZ:-UTC}
+      - PUID=568
+      - PGID=568
+      - LISTENING_ADDRESS=:30007
+      - PERIOD=5m
+      - UPDATE_COOLDOWN_PERIOD=5m
+      - DATADIR=/updater/data
+    # CONFIG (the full DNS-provider credentials JSON) is loaded from
+    # apps/ddns-updater/.env (gitignored), NOT ${VAR} interpolation.
+    # env_file path resolution is always relative to THIS compose file's own
+    # directory, regardless of the caller's working directory — interpolation
+    # is resolved from the deploy tool's CWD instead, which silently comes
+    # back blank if that tool doesn't cd into the app's own folder first.
+    env_file:
+      - path: .env
+        required: false
+
+    volumes:
+      - /mnt/data/app-config/ddns-updater:/updater/data
+
+    healthcheck:
+      test: ["CMD", "/updater/ddns-updater", "healthcheck"]
+      interval: 60s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
