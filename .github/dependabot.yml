@@ -44,6 +44,15 @@ updates:
     schedule:
       interval: "weekly"
     labels: ["dependencies", "terraform"]
+    ignore:
+      # v5 renamed cloudflare_record -> cloudflare_dns_record and changed
+      # data.cloudflare_zone's schema (name became read-only) — a version
+      # bump alone breaks this config (confirmed: terraform validate fails
+      # outright on v5). Needs a deliberate migration — rename every
+      # resource block, regenerate with cf-terraforming, verify a zero-diff
+      # plan — not something to accept as an automated PR.
+      - dependency-name: "cloudflare/cloudflare"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "terraform"
     directory: "/terraform/truenas"
