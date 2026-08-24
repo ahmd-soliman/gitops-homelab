@@ -73,7 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
 
       - name: terraform fmt -check
         run: terraform -chdir=${{ matrix.dir }} fmt -check -recursive
