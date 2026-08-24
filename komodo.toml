@@ -1,8 +1,8 @@
 # Komodo resource definitions for this repo. `resource_sync` at the bottom
 # points at this exact file, so committing a change here (a new [[stack]], a
 # new [[server]]) is enough — Komodo's sync procedure creates/updates/deletes
-# resources to match on its next run. See docs/komodo-setup.md for the
-# one-time UI bootstrap this depends on.
+# resources to match on its next run. See README.md's "Bootstrapping Komodo"
+# section for the one-time UI bootstrap this depends on.
 
 [[server]]
 name = "homelab"
