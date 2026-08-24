@@ -10,6 +10,61 @@ no real credentials, and a lot of apps trimmed out) — it's the interesting
 patterns, kept honest enough that they'd still work if you filled in your
 own values.
 
+## Architecture
+
+```mermaid
+flowchart TB
+    Git[("this repo")]
+    Client(["Client browser"])
+    CF["Cloudflare DNS\nterraform/dns"]
+
+    subgraph Edge["Edge — apps/caddy"]
+        Caddy["Caddy\nwildcard TLS via DNS-01"]
+    end
+
+    subgraph Host["homelab host"]
+        Komodo["Komodo\nCore + Periphery"]
+        Apps["grafana · prometheus\nuptime-kuma · ddns-updater\nnamespace: apps/"]
+        Komodo -->|deploys| Apps
+    end
+
+    subgraph Incus["Incus hosts — incus/modules/incus_host"]
+        TF["Terraform"]
+        Nodes["k8s-cp-0\nk8s-node-0 / k8s-node-1"]
+        TF -->|provisions + self-heals| Nodes
+    end
+
+    subgraph Cluster["Kubernetes cluster — incus/gitops"]
+        ArgoCD["ArgoCD\napp-of-apps"]
+        Traefik["Traefik ingress\nNodePort :30880"]
+        Workloads["whoami · cluster workloads"]
+        ArgoCD -->|reconciles| Traefik
+        ArgoCD -->|reconciles| Workloads
+    end
+
+    Git -->|watched by| Komodo
+    Git -->|watched by| ArgoCD
+    Git -.->|declares records for| CF
+
+    Client -->|resolves via| CF
+    Client -->|HTTPS *.homelab.example| Caddy
+    Caddy -->|reverse_proxy| Apps
+    Caddy -->|reverse_proxy, round robin| Traefik
+    Traefik --> Workloads
+    Nodes -.->|hosts| Cluster
+```
+
+Two independent GitOps loops watch the same repo and deploy to two different
+targets: **Komodo** deploys plain `docker-compose.yml` stacks straight to the
+homelab host, while **ArgoCD** reconciles Kubernetes manifests onto a small
+cluster running on **Incus** VMs that Terraform provisions. **Caddy** is the
+single point where both worlds meet the outside world — it's the only thing
+that ever requests a TLS certificate, and it fans traffic out to either a
+Komodo-deployed container or, via Traefik's NodePort, into the cluster.
+**Terraform** additionally owns the DNS records that point at Caddy and the
+ZFS datasets backing everything's persistent storage (not shown above — see
+[`terraform/truenas/`](terraform/truenas)).
+
 ## The pieces
 
 | Layer | Tool | Lives in |
